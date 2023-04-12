@@ -579,7 +579,9 @@ Save that, and then we'll update the template:
 
     <!doctype html>
     <html lang="en">
-        <head></head>
+        <head>
+            <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" crossorigin="anonymous">
+        </head>
         <body>
             <h1>Maryland Notices of Foreclosure by Zip Code</h1>
             <p>There are {{ count }} records in the database.</p>
