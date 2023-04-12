@@ -357,8 +357,11 @@ Luckily, there’s an option to tell SQLALchemy that we’re way too lazy to do 
 Now we’re finally ready to make the model. We need to tell the model four things:
 
     Its name. In this case, we’re calling it Notice, because it’s… a list of notices.
+
     The table name to both find the data in and to learn the columns from. That’s notices, what we called it using sqlite-utils.
+
     A weird line about extend_existing, which is always exactly the same. It just means “hey, we’re going to change something about the table,” because…
+
     …even though it learn the columns by reflecting, SQLAlchemy needs a unique column to be able to keep each row separate, like an id. In this case, it’s the `id` column. This is called the “primary key.”
 
 Fire up the server if it isn't running and give your page a refresh to make sure you don’t have any typos or other little issues, and then we’ll charge ahead to actually using this model.
