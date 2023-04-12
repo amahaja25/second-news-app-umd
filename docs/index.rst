@@ -16,7 +16,7 @@ What you will make
 
 By the end of this lesson, you will publish an interactive database and map
 of notices of foreclosure in Maryland zip codes over the past two years.
-You will do this with data published by the state at `https://opendata.maryland.gov/Housing/Maryland-Notices-of-Intent-to-Foreclose-by-Zip-Cod/ftsr-vapt <https://opendata.maryland.gov/Housing/Maryland-Notices-of-Intent-to-Foreclose-by-Zip-Cod/ftsr-vapt>`_`
+You will do this with data published by the state at `https://opendata.maryland.gov/Housing/Maryland-Notices-of-Intent-to-Foreclose-by-Zip-Cod/ftsr-vapt <https://opendata.maryland.gov/Housing/Maryland-Notices-of-Intent-to-Foreclose-by-Zip-Cod/ftsr-vapt>`_
 
 *****************
 About the authors

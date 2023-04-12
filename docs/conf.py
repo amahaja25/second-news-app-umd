@@ -44,7 +44,7 @@ source_suffix = '.rst'
 master_doc = 'index'
 
 # General information about the project.
-project = u'First News App'
+project = u'Second News App'
 copyright = u'%s, Derek Willis' % date.today().year
 
 # The version info for the project you're documenting, acts as replacement for
@@ -177,7 +177,7 @@ html_static_path = ['_static']
 #html_file_suffix = None
 
 # Output file base name for HTML help builder.
-htmlhelp_basename = 'FirstNewsAppdoc'
+htmlhelp_basename = 'SecondNewsAppdoc'
 
 
 # -- Options for LaTeX output ---------------------------------------------
@@ -197,7 +197,7 @@ latex_elements = {
 # (source start file, target name, title,
 #  author, documentclass [howto, manual, or own class]).
 latex_documents = [
-  ('index', 'FirstNewsApp.tex', u'First News App Documentation',
+  ('index', 'SecondNewsApp.tex', u'Second News App Documentation',
    u'Investigative Reporters and Editors', 'manual'),
 ]
 
