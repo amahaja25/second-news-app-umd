@@ -526,7 +526,7 @@ Let's edit our index template so that we're sending some information from the da
     if __name__ == '__main__':
         app.run(debug=True, use_reloader=True)
 
-Now, in the template file, let's add our `count` variable to the template:
+Now, in the template file, let's add our `count` variable to the template and clean things up:
 
 .. code-block:: html
 
@@ -670,4 +670,63 @@ Let's make it look good and show off our data:
 
 Save both app.py and the detail template, make sure the app is running and check out one of your zipcode urls (like /zipcode/20906).
 
-Now, let's think of how we can make this app better, and work on that.
+Now let's generate a list of zip codes that can link to the detail pages from the index template. First we'll need to send a list of all zip codes to the template by adding that to app.py:
+
+.. code-block:: python
+    :emphasize-lines: 22, 24
+
+    from flask import Flask
+    from flask import render_template
+    from peewee import *
+    app = Flask(__name__)
+
+    db = SqliteDatabase('foreclosures.db')
+
+    class Notice(Model):
+        id = IntegerField(unique=True)
+        zip = CharField()
+        month = DateField()
+        notices = IntegerField()
+
+        class Meta:
+            table_name = "notices"
+            database = db
+
+    @app.route("/")
+    def index():
+        notice_count = Notice.select().count()
+        all_zips = (Notice.select(Notice.zip).distinct())
+        template = 'index.html'
+        return render_template(template, count = notice_count, all_zips = all_zips)
+
+    @app.route('/zipcode/<slug>')
+    def detail(slug):
+        zipcode = slug
+        notices = Notice.select().where(Notice.zip==slug)
+        return render_template("detail.html", zipcode=zipcode, notices=notices, notices_count=len(notices))
+
+    if __name__ == '__main__':
+        app.run(debug=True, use_reloader=True)
+
+
+Then we can plug those zip codes in and build URLs.
+
+.. code-block:: html
+
+    <!doctype html>
+    <html lang="en">
+        <head>
+            <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" crossorigin="anonymous">
+        </head>
+        <body>
+            <h1>Maryland Notices of Foreclosure by Zip Code</h1>
+            <p>There are {{ count }} records in the database.</p>
+            <ul>
+                {% for zip in all_zips %}
+                    <li><a href="/zipcode/{{ zip.zip }}">{{ zip.zip }}</a></li>
+                {% endfor %}
+            </ul>
+        </body>
+    </html>
+
+Now, let's think about visualizing this data.
