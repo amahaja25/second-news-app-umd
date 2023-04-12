@@ -51,7 +51,7 @@ Open up the README by clicking on README.md on the left side and type something 
 
 .. code-block:: markdown
 
-    # My Second Web News App
+    # My Second News App
 
 Make sure to save it. You'll see on the left that there's a yellow "M" next to README.md, meaning you've made some edits. Let's double-check that in the terminal:
 
@@ -368,7 +368,7 @@ Fire up the server if it isn't running and give your page a refresh to make sure
 We don’t know how to make our database talk to the web page yet, so we’re going to cheat a little bit. Let’s edit the /index route to make it print something out:
 
 .. code-block:: python
-    :emphasize-lines: 17
+    :emphasize-lines: 20
 
     from flask import Flask
     from flask import render_template
@@ -415,7 +415,7 @@ For example, we can do a WHERE query - filtering our data - by using get or wher
 To play around a little, let’s try to find a specific zip code and month and print out its number of notices. We can use `where` to do that as well:
 
 .. code-block:: python
-    :emphasize-lines: 18-20
+    :emphasize-lines: 21-22
 
     from flask import Flask
     from flask import render_template
@@ -454,7 +454,7 @@ Since zip is the column with the zip code in it, we can just ask for notice.zip 
 If we want to get fancier, we can also select multiple rows with .where().
 
 .. code-block:: python
-    :emphasize-lines: 21-23
+    :emphasize-lines: 23-25
 
     from flask import Flask
     from flask import render_template
@@ -498,7 +498,7 @@ Act 4: Hello HTML
 Let's edit our index template so that we're sending some information from the database directly to the page. We'll replace the print statements in our app.py and add some variables to the template:
 
 .. code-block:: python
-    :emphasize-lines: 18, 20
+    :emphasize-lines: 20, 22
 
     from flask import Flask
     from flask import render_template
@@ -544,7 +544,7 @@ Now, in the template file, let's add our `count` variable to the template:
 Sending a single integer to our template is pretty easy, but so is sending a whole mess of things! Let’s send those notices from the 20906 ZIP code.
 
 .. code-block:: python
-    :emphasize-lines: 19, 21
+    :emphasize-lines: 21, 23
 
     from flask import Flask
     from flask import render_template
@@ -669,3 +669,5 @@ Let's make it look good and show off our data:
     </html>
 
 Save both app.py and the detail template, make sure the app is running and check out one of your zipcode urls (like /zipcode/20906).
+
+Now, let's think of how we can make this app better, and work on that.
