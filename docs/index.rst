@@ -651,7 +651,7 @@ Let's make it look good and show off our data:
       </head>
       <body>
           <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
-            <a class="navbar-brand" href="#">Zip Codes</a>
+            <a class="navbar-brand" href="/">Zip Codes</a>
           </nav>
           <div class="jumbotron">
             <div class="container">
@@ -719,13 +719,21 @@ Then we can plug those zip codes in and build URLs.
             <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" crossorigin="anonymous">
         </head>
         <body>
-            <h1>Maryland Notices of Foreclosure by Zip Code</h1>
-            <p>There are {{ count }} records in the database.</p>
-            <ul>
-                {% for zip in all_zips %}
-                    <li><a href="/zipcode/{{ zip.zip }}">{{ zip.zip }}</a></li>
-                {% endfor %}
-            </ul>
+        <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+            <a class="navbar-brand" href="/">Maryland Foreclosure Notices by Zip Code</a>
+        </nav>
+          <div class="jumbotron">
+            <div class="container">
+                <h1>Maryland Notices of Foreclosure by Zip Code</h1>
+                <p>There are {{ count }} records in the database.</p>
+                <h3>Zip Codes</h3>
+                <ul>
+                    {% for zip in all_zips %}
+                        <li><a href="/zipcode/{{ zip.zip }}">{{ zip.zip }}</a></li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
         </body>
     </html>
 
