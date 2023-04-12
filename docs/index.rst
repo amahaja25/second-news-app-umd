@@ -628,7 +628,8 @@ To build our detail page, we need a new route in app.py. This is going to be a s
     def detail(slug):
         zipcode = slug
         notices = Notice.select().where(Notice.zip==slug)
-        return render_template("detail.html", zipcode=zipcode, notices=notices, notices_count=len(notices))
+        total_notices = Notice.select(fn.SUM(Notice.notices).alias('sum')).where(Notice.zip==slug).scalar()
+        return render_template("detail.html", zipcode=zipcode, notices=notices, notices_count=len(notices), total_notices = total_notices)
 
     if __name__ == '__main__':
         app.run(debug=True, use_reloader=True)
@@ -656,13 +657,8 @@ Let's make it look good and show off our data:
           <div class="jumbotron">
             <div class="container">
               <h1 class="display-4">{{ zipcode }}</h1>
-              <p class="lead">This zip code has {{ notices_count }} records</p>
+              <p class="lead">This zip code has {{ notices_count }} records and {{ total_notices }} total notices.</p>
             </div>
-          </div>
-          <div class="container">
-              <p></p>
-              <p></p>
-              <p></p>
           </div>
         </div>
       </body>
