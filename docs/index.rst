@@ -278,13 +278,19 @@ To create our new SQLite database, we’re going to start with a CSV file. First
 
     $ mkdir static
 
-Download `the comma-delimited file <https://raw.githubusercontent.com/NewsAppsUMD/second-news-app-umd/main/docs/_static/foreclosures_by_month.csv>`_ that will be the backbone of our application and save it there as ``foreclosures_by_month.csv``. Now we'll install the tools necessary to turn it into a SQLite database, namely `sqlite-utils`.
+Download `the comma-delimited file <https://raw.githubusercontent.com/NewsAppsUMD/second-news-app-umd/main/docs/_static/foreclosures_by_month.csv>`_ that will be the backbone of our application and save it in the static directory as ``foreclosures_by_month.csv``. Now we'll install the tools necessary to turn it into a SQLite database, namely `sqlite-utils`.
 Then we'll create the database from the CSV file:
 
 .. code-block:: bash
 
+    $ cd static
+    $ wget https://raw.githubusercontent.com/NewsAppsUMD/second-news-app-umd/main/docs/_static/foreclosures_by_month.csv
+    $ cd ..
+
+.. code-block:: bash
+
     $ pip install sqlite-utils
-    $ sqlite-utils insert foreclosure.db notices static/foreclosures_by_month.csv --csv
+    $ sqlite-utils insert foreclosures.db notices static/foreclosures_by_month.csv --csv
 
 Add both the CSV and database file to your git repository.
 
@@ -300,11 +306,11 @@ Then everyone else was invented, and they didn’t like writing SQL, they just l
 
 Now everyone can be happy, sort of.
 
-There are a handful of ORMs that work for Python, and plenty that work with Flask. We'll use one called SQLAlchemy, because we're wizards, I guess? Let's install a Python package that gives us SQLAlchemy *and* works well with Flask:
+There are a handful of ORMs that work for Python, and plenty that work with Flask. We'll use one called Peewee, because, well, it's small:
 
 .. code-block:: bash
 
-    $ pip install flask_sqlalchemy
+    $ pip install peewee
 
 Next we will open up ``app.py`` in your code editor and add the import needed to use it:
 
@@ -313,7 +319,7 @@ Next we will open up ``app.py`` in your code editor and add the import needed to
 
     from flask import Flask
     from flask import render_template
-    from flask_sqlalchemy import SQLAlchemy
+    from peewee import *
     app = Flask(__name__)
 
     @app.route("/")
@@ -324,45 +330,38 @@ Next we will open up ``app.py`` in your code editor and add the import needed to
     if __name__ == '__main__':
         app.run(debug=True, use_reloader=True)
 
-Now we need to tell Flask about our notices table. Every table is called a Model, and we use that model to play around with its associated table from Python. (Although we only have one table in this case, so we’ll only have one model).
+Now we need to tell Flask about our database and its notices table. Every table is called a Model, and we use that model to play around with its associated table from Python. (Although we only have one table in this case, so we’ll only have one model).
 
-Going back to our code - right after we make our Flask app with app = Flask(__name__), you’ll want to tell SQLAlchemy everything important about the database and its tables. It’ll look like this:
+Going back to our code - right after we make our Flask app with app = Flask(__name__), you’ll want to tell Peewee everything important about the database and its tables. It’ll look like this:
 
 .. code-block:: python
-    :emphasize-lines: 6-7, 9,
+    :emphasize-lines: 6-15
 
     from flask import Flask
     from flask import render_template
-    from flask_sqlalchemy import SQLAlchemy
+    from peewee import *
     app = Flask(__name__)
 
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///foreclosures.db'
-    db = SQLAlchemy(app)
+    db = SqliteDatabase('foreclosures.db')
 
-    db.Model.metadata.reflect(db.engine)
+    class Notice(Model):
+        id = IntegerField(unique=True)
+        zip = CharField()
+        month = DateField()
+        notices = IntegerField()
 
-    class Notice(db.Model):
-        __tablename__ = 'notices'
-        __table_args__ = { 'extend_existing': True }
-        id = db.Column(db.Integer, primary_key=True)
+        class Meta:
+            database = db
 
 Let’s take it line-by-line to get an idea of what’s going on (or a-few-lines by a-few-lines).
 
-First off, you tell the app where to find the database and initialize SQLAlchemy. Then we tell SQLAlchemy about the notices table.
+First off, you tell the app where to find the database and have Peewee read it. Then we tell Peewee about the notices table.
 
-Usually when you’re working with SQLAlchemy, you have to make a nice long list of every column in the table, and whether it’s an integer, text, float, whatever. This table has about 11 thousand rows, so you’d probably perish from old age before we finished up.
+We need to tell the model several things:
 
-Luckily, there’s an option to tell SQLALchemy that we’re way too lazy to do that, and for every model it should just look at the columns that already exist in the table. This is called reflecting!
-
-Now we’re finally ready to make the model. We need to tell the model four things:
-
-    Its name. In this case, we’re calling it Notice, because it’s… a list of notices.
-
-    The table name to both find the data in and to learn the columns from. That’s notices, what we called it using sqlite-utils.
-
-    A weird line about extend_existing, which is always exactly the same. It just means “hey, we’re going to change something about the table,” because…
-
-    …even though it learn the columns by reflecting, SQLAlchemy needs a unique column to be able to keep each row separate, like an id. In this case, it’s the `id` column. This is called the “primary key.”
+    * Its name. In this case, we’re calling it Notice, because it’s… a list of notices.
+    * The columns and their datatypes. We also add a "unique=True" to the id column because no two values of that column are the same.
+    * The Meta class just makes explicit which database the notices table is in (we could use multiple databases) and the table name (in case we want to change it).
 
 Fire up the server if it isn't running and give your page a refresh to make sure you don’t have any typos or other little issues, and then we’ll charge ahead to actually using this model.
 
@@ -373,22 +372,24 @@ We don’t know how to make our database talk to the web page yet, so we’re go
 
     from flask import Flask
     from flask import render_template
-    from flask_sqlalchemy import SQLAlchemy
+    from peewee import *
     app = Flask(__name__)
 
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///foreclosures.db'
-    db = SQLAlchemy(app)
+    db = SqliteDatabase('foreclosures.db')
 
-    db.Model.metadata.reflect(db.engine)
+    class Notice(Model):
+        id = IntegerField(unique=True)
+        zip = CharField()
+        month = DateField()
+        notices = IntegerField()
 
-    class Notice(db.Model):
-        __tablename__ = 'notices'
-        __table_args__ = { 'extend_existing': True }
-        id = db.Column(db.Integer, primary_key=True)
+        class Meta:
+            table_name = "notices"
+            database = db
 
     @app.route("/")
     def index():
-        print("Total number of notices is", Notice.query.count())
+        print("Total number of notices is", Notice.select().count())
         template = 'index.html'
         return render_template(template)
 
@@ -399,42 +400,44 @@ Refresh the page and you’ll see… nothing changed? But pop on over to your co
 
 When you use print in the Flask app, it doesn’t print to the web page. That’s the render_template part. Instead, print prints to the command line. It’s totally useless for showing things to the user, but a nice cheat to check things and help us debug.
 
-Where’d that 11488 come from? Notice.query.count()! We used our model - Notice - to visit the database, build a new query, and count the number of rows in the table.
+Where’d that 11488 come from? Notice.select().count()! We used our model - Notice - to visit the database, build a new query, and count the number of rows in the table.
 
-Because we’re using an SQLAlchemy, we write Python, not SQL. SQLAlchemy takes care of the translation to SQL and just gives us the result.
+Because we’re using an Peewee, we write Python, not SQL. Peewee takes care of the translation to SQL and just gives us the result.
 
-For example, we can do a WHERE query - filtering our data - by using filter_by. It might look like this:
+For example, we can do a WHERE query - filtering our data - by using get or where. Retrieving a single records might look like this:
 
 .. code-block:: python
 
-    >>> zip = Notice.query.filter_by(zip='20906').first()
+    >>> zip = Notice.get(zip == '20906')
     >>> zip.id
     3949
 
-To play around a little, let’s try to find a specific zip code and month and print out its number of notices.
+To play around a little, let’s try to find a specific zip code and month and print out its number of notices. We can use `where` to do that as well:
 
 .. code-block:: python
     :emphasize-lines: 18-20
 
     from flask import Flask
     from flask import render_template
-    from flask_sqlalchemy import SQLAlchemy
+    from peewee import *
     app = Flask(__name__)
 
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///foreclosures.db'
-    db = SQLAlchemy(app)
+    db = SqliteDatabase('foreclosures.db')
 
-    db.Model.metadata.reflect(db.engine)
+    class Notice(Model):
+        id = IntegerField(unique=True)
+        zip = CharField()
+        month = DateField()
+        notices = IntegerField()
 
-    class Notice(db.Model):
-        __tablename__ = 'notices'
-        __table_args__ = { 'extend_existing': True }
-        id = db.Column(db.Integer, primary_key=True)
+        class Meta:
+            table_name = "notices"
+            database = db
 
     @app.route("/")
     def index():
-        print("Total number of notices is", Notice.query.count())
-        notice = Notice.query.filter_by(id=3963).first()
+        print("Total number of notices is", Notice.select().count())
+        notice = Notice.select().where(Notice.id==3963).get()
         print(f"Zip code {notice.zip} had {notice.notices} in {notice.month}")
         template = 'index.html'
         return render_template(template)
@@ -444,36 +447,38 @@ To play around a little, let’s try to find a specific zip code and month and p
 
 Make sure to save ``app.py``. Then reload the page and check the output in the terminal - remember, we're not showing anything on the page yet.
 
-What comes back from the database is that one row where id=3963 - we only got one because we asked for .first(). It works just like a normal variable, kind of like a dictionary that you don’t need ['whatever'] for. Instead, you can just ask for each column with a period.
+What comes back from the database is that one row where Notice.id==3963 - we only got one because we asked for .get(). It works just like a normal variable, kind of like a dictionary that you don’t need ['whatever'] for. Instead, you can just ask for each column with a period.
 
 Since zip is the column with the zip code in it, we can just ask for notice.zip and it will print right out.
 
-If we want to get fancier, we can also select multiple rows with .all(). There's more examples in the documentation: https://flask-sqlalchemy.palletsprojects.com/en/2.x/queries/#querying-records.
+If we want to get fancier, we can also select multiple rows with .where().
 
 .. code-block:: python
     :emphasize-lines: 21-23
 
     from flask import Flask
     from flask import render_template
-    from flask_sqlalchemy import SQLAlchemy
+    from peewee import *
     app = Flask(__name__)
 
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///foreclosures.db'
-    db = SQLAlchemy(app)
+    db = SqliteDatabase('foreclosures.db')
 
-    db.Model.metadata.reflect(db.engine)
+    class Notice(Model):
+        id = IntegerField(unique=True)
+        zip = CharField()
+        month = DateField()
+        notices = IntegerField()
 
-    class Notice(db.Model):
-        __tablename__ = 'notices'
-        __table_args__ = { 'extend_existing': True }
-        id = db.Column(db.Integer, primary_key=True)
+        class Meta:
+            table_name = "notices"
+            database = db
 
     @app.route("/")
     def index():
-        print("Total number of notices is", Notice.query.count())
-        notice = Notice.query.filter_by(id=3963).first()
+        print("Total number of notices is", Notice.select().count())
+        notice = Notice.select().where(Notice.id==3963).get()
         print(f"Zip code {notice.zip} had {notice.notices} in {notice.month}")
-        notices_20906 = Notice.query.filter_by(zip='20906').all()
+        notices_20906 = Notice.select().where(Notice.zip=='20906')
         for notice in notices_20906:
             print(notice.notices)
         template = 'index.html'
@@ -484,7 +489,7 @@ If we want to get fancier, we can also select multiple rows with .all(). There's
 
 Save app.py, reload the index page and check the terminal again. Lots of printing!
 
-We’ve been flexing our sweet new SQLAlchemy ORM, testing our skills at querying and counting and WHEREing without WHEREs, but how about we actually make this useful? In the next section we’ll take a look at how we can put this data on the actual web page.
+We’ve been flexing our sweet new Peewee ORM, testing our skills at querying and counting and WHEREing without WHEREs, but how about we actually make this useful? In the next section we’ll take a look at how we can put this data on the actual web page.
 
 *****************
 Act 4: Hello HTML
@@ -497,22 +502,24 @@ Let's edit our index template so that we're sending some information from the da
 
     from flask import Flask
     from flask import render_template
-    from flask_sqlalchemy import SQLAlchemy
+    from peewee import *
     app = Flask(__name__)
 
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///foreclosures.db'
-    db = SQLAlchemy(app)
+    db = SqliteDatabase('foreclosures.db')
 
-    db.Model.metadata.reflect(db.engine)
+    class Notice(Model):
+        id = IntegerField(unique=True)
+        zip = CharField()
+        month = DateField()
+        notices = IntegerField()
 
-    class Notice(db.Model):
-        __tablename__ = 'notices'
-        __table_args__ = { 'extend_existing': True }
-        id = db.Column(db.Integer, primary_key=True)
+        class Meta:
+            table_name = "notices"
+            database = db
 
     @app.route("/")
     def index():
-        notice_count = Notice.query.count()
+        notice_count = Notice.select().count()
         template = 'index.html'
         return render_template(template, count = notice_count)
 
@@ -525,7 +532,9 @@ Now, in the template file, let's add our `count` variable to the template:
 
     <!doctype html>
     <html lang="en">
-        <head></head>
+        <head>
+            <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" crossorigin="anonymous">
+        </head>
         <body>
             <h1>Maryland Notices of Foreclosure by Zip Code</h1>
             <p>There are {{ count }} records in the database.</p>
@@ -539,23 +548,25 @@ Sending a single integer to our template is pretty easy, but so is sending a who
 
     from flask import Flask
     from flask import render_template
-    from flask_sqlalchemy import SQLAlchemy
+    from peewee import *
     app = Flask(__name__)
 
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///foreclosures.db'
-    db = SQLAlchemy(app)
+    db = SqliteDatabase('foreclosures.db')
 
-    db.Model.metadata.reflect(db.engine)
+    class Notice(Model):
+        id = IntegerField(unique=True)
+        zip = CharField()
+        month = DateField()
+        notices = IntegerField()
 
-    class Notice(db.Model):
-        __tablename__ = 'notices'
-        __table_args__ = { 'extend_existing': True }
-        id = db.Column(db.Integer, primary_key=True)
+        class Meta:
+            table_name = "notices"
+            database = db
 
     @app.route("/")
     def index():
-        notice_count = Notice.query.count()
-        notices_20906 = Notice.query.filter_by(zip='20906').all()
+        notice_count = Notice.select().count()
+        notices_20906 = Notice.select().where(Notice.zip=='20906')
         template = 'index.html'
         return render_template(template, count = notice_count, notices = notices_20906)
 
@@ -589,30 +600,32 @@ To build our detail page, we need a new route in app.py. This is going to be a s
 
     from flask import Flask
     from flask import render_template
-    from flask_sqlalchemy import SQLAlchemy
+    from peewee import *
     app = Flask(__name__)
 
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///foreclosures.db'
-    db = SQLAlchemy(app)
+    db = SqliteDatabase('foreclosures.db')
 
-    db.Model.metadata.reflect(db.engine)
+    class Notice(Model):
+        id = IntegerField(unique=True)
+        zip = CharField()
+        month = DateField()
+        notices = IntegerField()
 
-    class Notice(db.Model):
-        __tablename__ = 'notices'
-        __table_args__ = { 'extend_existing': True }
-        id = db.Column(db.Integer, primary_key=True)
+        class Meta:
+            table_name = "notices"
+            database = db
 
     @app.route("/")
     def index():
-        notice_count = Notice.query.count()
-        notices_20906 = Notice.query.filter_by(zip='20906').all()
+        notice_count = Notice.select().count()
+        notices_20906 = Notice.select().where(Notice.zip=='20906')
         template = 'index.html'
         return render_template(template, count = notice_count, notices = notices_20906)
 
     @app.route('/zipcode/<slug>')
     def detail(slug):
         zipcode = slug
-        notices = Notice.query.filter_by(zip=slug).all()
+        notices = Notice.select().where(Notice.zip==slug)
         return render_template("detail.html", zipcode=zipcode, notices=notices, notices_count=len(notices))
 
     if __name__ == '__main__':
