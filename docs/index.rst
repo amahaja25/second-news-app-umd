@@ -723,14 +723,541 @@ Then we can plug those zip codes in and build URLs.
                 <h1>Maryland Notices of Foreclosure by Zip Code</h1>
                 <p>There are {{ count }} records in the database.</p>
                 <h3>Zip Codes</h3>
-                <ul>
+                <div class="row">
+                <div class="col-md-4">
+                <ul class="list-unstyled">
                     {% for zip in all_zips %}
                         <li><a href="/zipcode/{{ zip.zip }}">{{ zip.zip }}</a></li>
-                    {% endfor %}
-                </ul>
+                        {% if loop.index % 3 == 0 and not loop.last %}
+                        </ul>
+                            </div>
+                            <div class="col-md-4">
+                                <ul class="list-unstyled">
+                            {% endif %}
+                        {% endfor %}
+                    </ul>
+                </div>
             </div>
         </div>
         </body>
     </html>
 
-Now, let's think about visualizing this data.
+Now, let's think about visualizing this data. Let's create a heatmap of the monthly data for each zip code. To do that, we'll need to create that monthly data in app.py:
+
+.. code-block:: python
+    :emphasize-lines: 30-33
+
+    from flask import Flask
+    from flask import render_template
+    from peewee import *
+    app = Flask(__name__)
+
+    db = SqliteDatabase('foreclosures.db')
+
+    class Notice(Model):
+        id = IntegerField(unique=True)
+        zip = CharField()
+        month = DateField()
+        notices = IntegerField()
+
+        class Meta:
+            table_name = "notices"
+            database = db
+
+    @app.route("/")
+    def index():
+        notice_count = Notice.select().count()
+        all_zips = (Notice.select(Notice.zip).distinct())
+        template = 'index.html'
+        return render_template(template, count = notice_count, all_zips = all_zips)
+
+    @app.route('/zipcode/<slug>')
+    def detail(slug):
+        zipcode = slug
+        notices = Notice.select().where(Notice.zip==slug)
+        total_notices = Notice.select(fn.SUM(Notice.notices).alias('sum')).where(Notice.zip==slug).scalar()
+        notice_json = []
+        for notice in notices:
+            notice_json.append({'x': str(notice.month.year) + ' ' + str(notice.month.month), 'y': notice.zip, 'heat': notice.notices})
+        return render_template("detail.html", zipcode=zipcode, notices=notices, notices_count=len(notices), notice_json = notice_json, total_notices = total_notices)
+
+    if __name__ == '__main__':
+        app.run(debug=True, use_reloader=True)
+
+Then we can add a JavaScript library to our template and load the JSON data:
+
+.. code-block:: html
+    :emphasize-lines: 6-7, 19-31
+
+    <!doctype html>
+    <html>
+      <head>
+        <title>Zip code: {{ zipcode }}</title>
+        <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" crossorigin="anonymous">
+        <script src="https://cdn.anychart.com/releases/8.7.1/js/anychart-core.min.js"></script>
+        <script src="https://cdn.anychart.com/releases/8.7.1/js/anychart-heatmap.min.js"></script>
+      </head>
+      <body>
+          <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+            <a class="navbar-brand" href="/">Maryland Foreclosure Notices by Zip Code</a>
+          </nav>
+          <div class="jumbotron">
+            <div class="container">
+              <h1 class="display-4">{{ zipcode }}</h1>
+              <p class="lead">This zip code has {{ notices_count }} records and {{ total_notices }} total notices.</p>
+            </div>
+          </div>
+          <div id="container"></div>
+          <script>
+            anychart.onDocumentReady(function () {
+                var data = {{ notice_json|tojson }};
+                chart = anychart.heatMap(data);
+                chart.title("Monthly Foreclosure Notices");
+                var customColorScale = anychart.scales.linearColor();
+                customColorScale.colors(["#ACE8D4", "#00726A"]);
+                chart.colorScale(customColorScale);
+                chart.container("container");
+                chart.draw();
+            });
+          </script>
+        </div>
+      </body>
+    </html>
+
+Reload one of your zip code pages and you'll see a horizontal heat map where the monthly values are shaded according to the number of notices.
+
+*******************
+Act 5: Hello Census
+*******************
+
+We'd like to know more about the households in these zip codes. For that, we can ask the Census Bureau for help, via its APIs. If you don't already have a key (or can't find it), you can get one `here <https://api.census.gov/data/key_signup.html>`_.
+
+You should add that Census API to your repository as a Codespaces secret called CENSUS_API_KEY. Having done that, you should reload your codespace for it to take effect.
+
+We'll need a way for Python to talk to the Census API, and there's a handy library for that called, well, `census <https://github.com/datamade/census>`_. Let's pip install it:
+
+.. code-block:: bash
+
+    $ pip install census
+
+Let's check out this library in the terminal. We'll use it to get the number of owner-occupied housing units in the 20906 zip code from the ACS. The variable for that category is `B25003_002E` and
+can be found at `this page <https://api.census.gov/data/2021/acs/acs5/variables.html>`_.
+
+.. code-block:: python
+
+    >>> from census import Census
+    >>> import os
+    >>> census_api_key = os.environ.get('CENSUS_API_KEY')
+    >>> c = Census(census_api_key)
+    >>> c.acs5.state_zipcode(('NAME', 'B25003_002E'), '24', '20906')
+    [{'NAME': 'ZCTA5 20906', 'B25003_002E': 16570.0, 'zip code tabulation area': '20906'}]
+
+Take a look at what's going on here: we're calling the ACS 5-year data and using the `state_zipcode` function to retrieve results for a specific state and zip code.
+In our case, we use `24` as the state code for Maryland and `20906` as the zip code. The result is an Array with one dictionary that contains the number of households, 16570,
+for this zip code.
+
+Let's incorporate that into our detail page, first by adding code to our app.py file. Replace your app.py with this:
+
+.. code-block:: python
+    :emphasize-lines: 1-9, 36-37
+
+    import os
+    from peewee import *
+    from census import Census
+    from flask import Flask
+    from flask import render_template
+    app = Flask(__name__)
+    db = SqliteDatabase('foreclosures.db')
+    census_api_key = os.environ.get('CENSUS_API_KEY')
+    c = Census(census_api_key)
+
+    class Notice(Model):
+        id = IntegerField(unique=True)
+        zip = CharField()
+        month = DateField()
+        notices = IntegerField()
+
+        class Meta:
+            table_name = "notices"
+            database = db
+
+    @app.route("/")
+    def index():
+        notice_count = Notice.select().count()
+        all_zips = (Notice.select(Notice.zip).distinct())
+        template = 'index.html'
+        return render_template(template, count = notice_count, all_zips = all_zips)
+
+    @app.route('/zipcode/<slug>')
+    def detail(slug):
+        zipcode = slug
+        notices = Notice.select().where(Notice.zip==slug)
+        total_notices = Notice.select(fn.SUM(Notice.notices).alias('sum')).where(Notice.zip==slug).scalar()
+        notice_json = []
+        for notice in notices:
+            notice_json.append({'x': str(notice.month.year) + ' ' + str(notice.month.month), 'y': notice.zip, 'heat': notice.notices})
+        owner_occupied = c.acs5.state_zipcode(('NAME', 'B25003_002E'), '24', zipcode)
+        return render_template("detail.html", zipcode=zipcode, notices=notices, notices_count=len(notices), notice_json = notice_json, total_notices = total_notices, owner_occupied = owner_occupied[0]['B25003_002E'])
+
+    if __name__ == '__main__':
+        app.run(debug=True, use_reloader=True)
+
+Then let's update the detail template to make it so we can display a sentence listing the number of owner-occupied housing units.
+
+.. code-block:: html
+    :emphasize-lines: 16
+
+    <!doctype html>
+    <html>
+      <head>
+        <title>Zip code: {{ zipcode }}</title>
+        <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" crossorigin="anonymous">
+        <script src="https://cdn.anychart.com/releases/8.7.1/js/anychart-core.min.js"></script>
+        <script src="https://cdn.anychart.com/releases/8.7.1/js/anychart-heatmap.min.js"></script>
+      </head>
+      <body>
+          <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+            <a class="navbar-brand" href="/">Maryland Foreclosure Notices by Zip Code</a>
+          </nav>
+          <div class="jumbotron">
+            <div class="container">
+              <h1 class="display-4">{{ zipcode }}</h1>
+              <p class="lead">This zip code has {{ notices_count }} records and {{ total_notices }} total notices. There are {{ owner_occupied }} owner-occupied housing units in this zip code, according to the Census Bureau's American Community Survey.</p>
+            </div>
+          </div>
+          <div id="container"></div>
+          <script>
+            anychart.onDocumentReady(function () {
+                var data = {{ notice_json|tojson }};
+                chart = anychart.heatMap(data);
+                chart.title("Monthly Foreclosure Notices");
+                var customColorScale = anychart.scales.linearColor();
+                customColorScale.colors(["#ACE8D4", "#00726A"]);
+                chart.colorScale(customColorScale);
+                chart.container("container");
+                chart.draw();
+            });
+          </script>
+        </div>
+      </body>
+    </html>
+
+Fire up the server and check out the detail page for zip code 20906. That's pretty good, but the formatting of the number is not great. We can do better, and our friend Simon `shows one way to do it <https://til.simonwillison.net/jinja/format-thousands>`_.
+
+First we'll make sure that app.py is sending an integer, not a float, to the template:
+
+.. code-block:: python
+    :emphasize-lines: 37
+
+    import os
+    from peewee import *
+    from census import Census
+    from flask import Flask
+    from flask import render_template
+    app = Flask(__name__)
+    db = SqliteDatabase('foreclosures.db')
+    census_api_key = os.environ.get('CENSUS_API_KEY')
+    c = Census(census_api_key)
+
+    class Notice(Model):
+        id = IntegerField(unique=True)
+        zip = CharField()
+        month = DateField()
+        notices = IntegerField()
+
+        class Meta:
+            table_name = "notices"
+            database = db
+
+    @app.route("/")
+    def index():
+        notice_count = Notice.select().count()
+        all_zips = (Notice.select(Notice.zip).distinct())
+        template = 'index.html'
+        return render_template(template, count = notice_count, all_zips = all_zips)
+
+    @app.route('/zipcode/<slug>')
+    def detail(slug):
+        zipcode = slug
+        notices = Notice.select().where(Notice.zip==slug)
+        total_notices = Notice.select(fn.SUM(Notice.notices).alias('sum')).where(Notice.zip==slug).scalar()
+        notice_json = []
+        for notice in notices:
+            notice_json.append({'x': str(notice.month.year) + ' ' + str(notice.month.month), 'y': notice.zip, 'heat': notice.notices})
+        owner_occupied = c.acs5.state_zipcode(('NAME', 'B25003_002E'), '24', zipcode)
+        return render_template("detail.html", zipcode=zipcode, notices=notices, notices_count=len(notices), notice_json = notice_json, total_notices = total_notices, owner_occupied = int(owner_occupied[0]['B25003_002E']))
+
+    if __name__ == '__main__':
+        app.run(debug=True, use_reloader=True)
+
+And then we'll change the detail template to add the comma formatting:
+
+.. code-block:: html
+    :emphasize-lines: 16
+
+    <!doctype html>
+    <html>
+      <head>
+        <title>Zip code: {{ zipcode }}</title>
+        <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" crossorigin="anonymous">
+        <script src="https://cdn.anychart.com/releases/8.7.1/js/anychart-core.min.js"></script>
+        <script src="https://cdn.anychart.com/releases/8.7.1/js/anychart-heatmap.min.js"></script>
+      </head>
+      <body>
+          <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+            <a class="navbar-brand" href="/">Maryland Foreclosure Notices by Zip Code</a>
+          </nav>
+          <div class="jumbotron">
+            <div class="container">
+              <h1 class="display-4">{{ zipcode }}</h1>
+              <p class="lead">This zip code has {{ notices_count }} records and {{ total_notices }} total notices. There are {{ "{:,}".format(owner_occupied) }} owner-occupied housing units in this zip code, according to the Census Bureau's American Community Survey.</p>
+            </div>
+          </div>
+          <div id="container"></div>
+          <script>
+            anychart.onDocumentReady(function () {
+                var data = {{ notice_json|tojson }};
+                chart = anychart.heatMap(data);
+                chart.title("Monthly Foreclosure Notices");
+                var customColorScale = anychart.scales.linearColor();
+                customColorScale.colors(["#ACE8D4", "#00726A"]);
+                chart.colorScale(customColorScale);
+                chart.container("container");
+                chart.draw();
+            });
+          </script>
+        </div>
+      </body>
+    </html>
+
+Save both app.py and detail.html and reload the page. That's better!
+
+But notice that the page load is slower than it used to be? That's because each time we hit a detail page, the app needs to call out to the Census API and wait for it to respond.
+That might be necessary for some apps, but considering how infrequently ACS data changes, it would be better if we could store this information in the database. We're already storing
+information about the zip codes in our notices table. Let's create a separate Python script that will fetch the Census data and store it in our database. Create a file called zips.py:
+
+.. code-block:: python
+
+    import os
+    from peewee import *
+    from census import Census
+    from app import *
+    db = SqliteDatabase('foreclosures.db')
+    census_api_key = os.environ.get('CENSUS_API_KEY')
+    c = Census(census_api_key)
+
+    # get all the zips from the Notices
+    all_zips = (Notice.select(Notice.zip).distinct())
+
+    # create a new table for the zip codes and owner_occupied figures
+    class ZipCode(Model):
+        zipcode = CharField()
+        owner_occupied = IntegerField(null = True)
+
+        class Meta:
+            database = db
+
+    # create that table if it doesn't already exist
+    db.create_tables([ZipCode], safe=True)
+
+    # create a container to put my data in
+    rows_to_insert = []
+
+    # loop over our zip codes, retrieving Census data where possible
+    for zip in all_zips:
+    print(zip.zip)
+    if zip.zip != "No Zip Code":
+        owner_occupied = c.acs5.state_zipcode(('NAME', 'B25003_002E'), '24', zip.zip)
+        if owner_occupied and 'B25003_002E' in owner_occupied[0]:
+            rows_to_insert.append({"zipcode": zip.zip, "owner_occupied": int(owner_occupied[0]['B25003_002E'])})
+
+    # insert the data we've collected
+    ZipCode.insert_many(rows_to_insert).execute()
+
+Save that file and run it in terminal: python zips.py. It'll take a bit. When it's done, we can update our app.py and templates to use the new data.
+
+First, we need to update app.py to let it know that the new table exists and we want to use it in the index() function:
+
+.. code-block:: python
+    :emphasize-lines: 21-26, 31
+
+    import os
+    from peewee import *
+    from census import Census
+    from flask import Flask
+    from flask import render_template
+    app = Flask(__name__)
+    db = SqliteDatabase('foreclosures.db')
+    census_api_key = os.environ.get('CENSUS_API_KEY')
+    c = Census(census_api_key)
+
+    class Notice(Model):
+        id = IntegerField(unique=True)
+        zip = CharField()
+        month = DateField()
+        notices = IntegerField()
+
+        class Meta:
+            table_name = "notices"
+            database = db
+
+    class ZipCode(Model):
+        zipcode = CharField()
+        owner_occupied = IntegerField(null = True)
+
+        class Meta:
+            database = db
+
+    @app.route("/")
+    def index():
+        notice_count = Notice.select().count()
+        all_zips = ZipCode.select()
+        template = 'index.html'
+        return render_template(template, count = notice_count, all_zips = all_zips)
+
+    @app.route('/zipcode/<slug>')
+    def detail(slug):
+        zipcode = slug
+        notices = Notice.select().where(Notice.zip==slug)
+        total_notices = Notice.select(fn.SUM(Notice.notices).alias('sum')).where(Notice.zip==slug).scalar()
+        notice_json = []
+        for notice in notices:
+            notice_json.append({'x': str(notice.month.year) + ' ' + str(notice.month.month), 'y': notice.zip, 'heat': notice.notices})
+        owner_occupied = c.acs5.state_zipcode(('NAME', 'B25003_002E'), '24', zipcode)
+        return render_template("detail.html", zipcode=zipcode, notices=notices, notices_count=len(notices), notice_json = notice_json, total_notices = total_notices, owner_occupied = int(owner_occupied[0]['B25003_002E']))
+
+    if __name__ == '__main__':
+        app.run(debug=True, use_reloader=True)
+
+Then we need to update the index.html template file to refer to the zipcodes properly:
+
+.. code-block:: html
+    :emphasize-lines: 19
+
+    <!doctype html>
+    <html lang="en">
+        <head>
+            <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" crossorigin="anonymous">
+        </head>
+        <body>
+        <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+            <a class="navbar-brand" href="/">Maryland Foreclosure Notices by Zip Code</a>
+        </nav>
+          <div class="jumbotron">
+            <div class="container">
+                <h1>Maryland Notices of Foreclosure by Zip Code</h1>
+                <p>There are {{ count }} records in the database.</p>
+                <h3>Zip Codes</h3>
+                <div class="row">
+                    <div class="col-md-4">
+                    <ul class="list-unstyled">
+                        {% for zip in all_zips %}
+                            <li><a href="/zipcode/{{ zip.zipcode }}">{{ zip.zipcode }}</a></li>
+                            {% if loop.index % 3 == 0 and not loop.last %}
+                            </ul>
+                                </div>
+                                <div class="col-md-4">
+                                    <ul class="list-unstyled">
+                                {% endif %}
+                            {% endfor %}
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+        </body>
+    </html>
+
+Next, we can tackle retrieving the zipcode and owner-occupied housing units from the database and not the API in the detail() function in app.py:
+
+.. code-block:: python
+    :emphasize-lines: 37, 43
+
+    import os
+    from peewee import *
+    from census import Census
+    from flask import Flask
+    from flask import render_template
+    app = Flask(__name__)
+    db = SqliteDatabase('foreclosures.db')
+    census_api_key = os.environ.get('CENSUS_API_KEY')
+    c = Census(census_api_key)
+
+    class Notice(Model):
+        id = IntegerField(unique=True)
+        zip = CharField()
+        month = DateField()
+        notices = IntegerField()
+
+        class Meta:
+            table_name = "notices"
+            database = db
+
+    class ZipCode(Model):
+        zipcode = CharField()
+        owner_occupied = IntegerField(null = True)
+
+        class Meta:
+            database = db
+
+    @app.route("/")
+    def index():
+        notice_count = Notice.select().count()
+        all_zips = ZipCode.select()
+        template = 'index.html'
+        return render_template(template, count = notice_count, all_zips = all_zips)
+
+    @app.route('/zipcode/<slug>')
+    def detail(slug):
+        zipcode = ZipCode.get(ZipCode.zipcode==slug)
+        notices = Notice.select().where(Notice.zip==slug)
+        total_notices = Notice.select(fn.SUM(Notice.notices).alias('sum')).where(Notice.zip==slug).scalar()
+        notice_json = []
+        for notice in notices:
+            notice_json.append({'x': str(notice.month.year) + ' ' + str(notice.month.month), 'y': notice.zip, 'heat': notice.notices})
+        return render_template("detail.html", zipcode=zipcode, notices=notices, notices_count=len(notices), notice_json = notice_json, total_notices = total_notices)
+
+    if __name__ == '__main__':
+        app.run(debug=True, use_reloader=True)
+
+And then update the detail.html template to take advantage of the data we have:
+
+.. code-block:: html
+    :emphasize-lines: 16
+
+    <!doctype html>
+    <html>
+      <head>
+        <title>Zip code: {{ zipcode }}</title>
+        <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" crossorigin="anonymous">
+        <script src="https://cdn.anychart.com/releases/8.7.1/js/anychart-core.min.js"></script>
+        <script src="https://cdn.anychart.com/releases/8.7.1/js/anychart-heatmap.min.js"></script>
+      </head>
+      <body>
+          <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+            <a class="navbar-brand" href="/">Maryland Foreclosure Notices by Zip Code</a>
+          </nav>
+          <div class="jumbotron">
+            <div class="container">
+              <h1 class="display-4">{{ zipcode.zipcode }}</h1>
+              <p class="lead">This zip code has {{ notices_count }} records and {{ total_notices }} total notices. There are {{ "{:,}".format(zipcode.owner_occupied) }} owner-occupied housing units in this zip code, according to the Census Bureau's American Community Survey.</p>
+            </div>
+          </div>
+          <div id="container"></div>
+          <script>
+            anychart.onDocumentReady(function () {
+                var data = {{ notice_json|tojson }};
+                chart = anychart.heatMap(data);
+                chart.title("Monthly Foreclosure Notices");
+                var customColorScale = anychart.scales.linearColor();
+                customColorScale.colors(["#ACE8D4", "#00726A"]);
+                chart.colorScale(customColorScale);
+                chart.container("container");
+                chart.draw();
+            });
+          </script>
+        </div>
+      </body>
+    </html>
+
+Save app.py and detail.html and reload the page for 20906. If it works, change the slug to /20901 and see how fast it loads. Nice!
