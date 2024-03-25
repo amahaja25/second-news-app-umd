@@ -16,8 +16,7 @@
             <div class="col-md-4">
             <ul class="list-unstyled">
                 {% for zip in all_zips %}
-                    <li><a href="/zipcode/{{ zip.zip }}">{{ zip.zip }}</a></li>
-                    {% if loop.index % 3 == 0 and not loop.last %}
+                <li><a href="/zipcode/{{ zip.zipcode }}">{{ zip.zipcode }}</a></li>                    {% if loop.index % 3 == 0 and not loop.last %}
                     </ul>
                         </div>
                         <div class="col-md-4">
